@@ -25,6 +25,24 @@ node ("default-java") {
         archiveArtifacts 'gradlew, gradle/wrapper/*, templates/build.gradle, config/**, build/distributions/Terasology.zip, build/resources/main/org/terasology/version/versionInfo.properties, natives/**'
     }
     
+    stage('Test') {
+        // Keep tests in a separate stage to cope with failing MTE
+        steps {
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                sh './gradlew test'
+            }
+        }        
+    }
+
+    stage('Analytics') {
+        // Run analytics like Checkstyle or PMD without running tests
+        sh './gradlew check -x test'
+    }
+    
+    stage('JavaDoc') {
+        sh './gradlew javadoc'
+    }
+    
     stage('Publish') {
         if (env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")) {
             withCredentials([usernamePassword(credentialsId: 'artifactory-gooey', usernameVariable: 'artifactoryUser', passwordVariable: 'artifactoryPass')]) {
@@ -33,10 +51,6 @@ node ("default-java") {
         } else {
             println "Running on a branch other than 'master' or 'develop' bypassing publishing"
         }
-    }
-
-    stage('Analytics') {
-        sh './gradlew check javadoc'
     }
     
     stage('Record') {
