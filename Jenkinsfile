@@ -25,12 +25,10 @@ node ("default-java") {
         archiveArtifacts 'gradlew, gradle/wrapper/*, templates/build.gradle, config/**, build/distributions/Terasology.zip, build/resources/main/org/terasology/version/versionInfo.properties, natives/**'
     }
     
-    /*
     stage('Test') {
         // Keep tests in a separate stage to cope with failing MTE
         sh './gradlew test'
     }
-    */
 
     stage('Analytics') {
         // Run analytics like Checkstyle or PMD without running tests
@@ -57,11 +55,21 @@ node ("default-java") {
             step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
             recordIssues tool: javaDoc()
         }
-        junit testResults: 'build/test-results/test/*.xml',  allowEmptyResults: true
+        junit testResults: 'build/test-results/test/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
         recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
         recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/*.xml', useRankAsPriority: true)
         recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
         recordIssues tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'ASAP')
+
+        // mark UNSTABLE builds as SUCCESS on Github
+        step([ 
+            $class: 'GitHubCommitStatusSetter', 
+            statusResultSource: [
+                $class: 'ConditionalStatusResultSource', 
+                results: [[$class: 'BetterThanOrEqualBuildResult', message: '', result: 'UNSTABLE', state: 'SUCCESS']]
+            ]
+        ])
+
     }
 }
 
