@@ -25,14 +25,12 @@ node ("default-java") {
         archiveArtifacts 'gradlew, gradle/wrapper/*, templates/build.gradle, config/**, build/distributions/Terasology.zip, build/resources/main/org/terasology/version/versionInfo.properties, natives/**'
     }
     
+    /*
     stage('Test') {
         // Keep tests in a separate stage to cope with failing MTE
-        steps {
-            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                sh './gradlew test'
-            }
-        }        
+        sh './gradlew test'
     }
+    */
 
     stage('Analytics') {
         // Run analytics like Checkstyle or PMD without running tests
