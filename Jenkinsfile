@@ -9,7 +9,7 @@ node ("default-java || light-java") {
 
         echo "Copying in the build harness from an engine job"
         copyArtifacts(projectName: "Terasology/engine/develop", filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
-        copyArtifacts(projectName: "Terasology/engine/develop", filter: "*, gradle/wrapper/**, config/**, natives/**, buildSrc/**", selector: lastSuccessful())
+        copyArtifacts(projectName: "Terasology/engine/develop", filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
         def realProjectName = findRealProjectName()
         echo "Setting real project name to: $realProjectName"
@@ -18,6 +18,7 @@ node ("default-java || light-java") {
             rm -f settings.gradle
             rm -f gradle.properties
             echo "rootProject.name = '$realProjectName'" >> settings.gradle
+            echo 'includeBuild("build-logic")' >> settings.gradle
             cat settings.gradle
             chmod +x gradlew
         """
