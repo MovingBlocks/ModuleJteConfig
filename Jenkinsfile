@@ -1,8 +1,9 @@
-node ("default-java || light-java") {
-    // TODO: Add to engine and elsewhere too, but base discards on branch? develop, master, or release might keep longer
-    // Only keep a single build's worth of artifacts before truncating (module jars get published to Artifactory anyway)
-    properties([buildDiscarder(logRotator(artifactNumToKeepStr: '1'))])
+// Only keep a single build's worth of artifacts before truncating (module jars get published to Artifactory anyway)
+properties([
+    buildDiscarder(logRotator(artifactNumToKeepStr: '1'))
+])
 
+node ("ts-module && heavy && java8") {
     stage('Prepare') {
         echo "Going to check out the things !"
         checkout scm
