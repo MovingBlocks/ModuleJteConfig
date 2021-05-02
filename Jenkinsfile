@@ -26,7 +26,8 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Build') {
-        sh './gradlew clean jar'
+        sh './gradlew clean htmlDependencyReport jar'
+        publishHTML([allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: 'build/reports/project/dependencies', reportFiles: 'index.html', reportName: 'Dependency Report', reportTitles: 'Dependency Report'])
         archiveArtifacts 'build/libs/*.jar'
     }
 
