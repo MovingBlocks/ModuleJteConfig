@@ -8,9 +8,17 @@ node ("ts-module && heavy && java8") {
         echo "Going to check out the things !"
         checkout scm
 
-        echo "Copying in the build harness from an engine job"
-        copyArtifacts(projectName: "Terasology/engine/develop", filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
-        copyArtifacts(projectName: "Terasology/engine/develop", filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
+        // Vary where we copy the build harness from based on where the actively running job lives
+        def buildHarnessOrigin = "Terasology/engine/develop"
+        if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/H")) { // "Normal" module tests with the regular build harness in Nanoware land
+            buildHarnessOrigin = "Nanoware/Terasology/develop"
+        } else if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/X")) { // Unusual module tests with separate build harness (and JteConfig branch - defined elsewhere)
+            buildHarnessOrigin = "Nanoware/Terasology/experimental"
+        }
+
+        echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
+        copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
+        copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
         def realProjectName = findRealProjectName()
         echo "Setting real project name to: $realProjectName"
