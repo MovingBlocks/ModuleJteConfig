@@ -31,6 +31,11 @@ node ("ts-module && heavy && java8") {
         archiveArtifacts 'build/libs/*.jar'
     }
 
+    stage('Unit Tests') {
+        sh './gradlew unitTest'
+        junit testResults: 'build/test-results/unitTest/*.xml', allowEmptyResults: true
+    }
+
     stage('Publish') {
         if (env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")) {
             withCredentials([usernamePassword(credentialsId: 'artifactory-gooey', usernameVariable: 'artifactoryUser', passwordVariable: 'artifactoryPass')]) {
@@ -41,21 +46,26 @@ node ("ts-module && heavy && java8") {
         }
     }
 
-    stage('Analytics') {
-        sh './gradlew check spotbugsmain javadoc'
+    stage('Integration Tests') {
+        sh './gradlew integrationTest'
+        junit testResults: 'build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
     }
 
-    stage('Record') {
+    stage('Analytics') {
+        sh './gradlew check -x test spotbugsmain'
+        recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
+        recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true)
+        recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
+        recordIssues tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'ASAP')
+    }
+
+    stage('Documentation') {
+        sh './gradlew javadoc'
         // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
         if (fileExists("build/docs/javadoc/index.html")) {
             step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
             recordIssues tool: javaDoc()
         }
-        junit testResults: 'build/test-results/test/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
-        recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
-        recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true)
-        recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
-        recordIssues tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'ASAP')
     }
 }
 
