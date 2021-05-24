@@ -34,14 +34,17 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Build') {
-        sh './gradlew clean htmlDependencyReport jar'
+        sh './gradlew --console=plain clean htmlDependencyReport jar'
         publishHTML([allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: 'build/reports/project/dependencies', reportFiles: 'index.html', reportName: 'Dependency Report', reportTitles: 'Dependency Report'])
         archiveArtifacts 'build/libs/*.jar'
     }
 
     stage('Unit Tests') {
-        sh './gradlew unitTest'
-        junit testResults: 'build/test-results/unitTest/*.xml', allowEmptyResults: true
+        try {
+            sh './gradlew --console=plain unitTest'
+        } finally {
+            junit testResults: 'build/test-results/unitTest/*.xml', allowEmptyResults: true
+        }
     }
 
     stage('Publish') {
@@ -55,12 +58,15 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Integration Tests') {
-        sh './gradlew integrationTest'
-        junit testResults: 'build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
+        try {
+            sh './gradlew --console=plain integrationTest'
+        } finally {
+            junit testResults: 'build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
+        }
     }
 
     stage('Analytics') {
-        sh './gradlew check -x test spotbugsmain'
+        sh './gradlew --console=plain check -x test spotbugsmain'
         recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
         recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true)
         recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
@@ -68,7 +74,7 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Documentation') {
-        sh './gradlew javadoc'
+        sh './gradlew --console=plain javadoc'
         // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
         if (fileExists("build/docs/javadoc/index.html")) {
             step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
