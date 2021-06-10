@@ -8,9 +8,17 @@ node ("ts-module && heavy && java8") {
         echo "Going to check out the things !"
         checkout scm
 
-        echo "Copying in the build harness from an engine job"
-        copyArtifacts(projectName: "Terasology/engine/develop", filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
-        copyArtifacts(projectName: "Terasology/engine/develop", filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
+        // Vary where we copy the build harness from based on where the actively running job lives
+        def buildHarnessOrigin = "Terasology/engine/develop"
+        if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/H")) { // "Normal" module tests with the regular build harness in Nanoware land
+            buildHarnessOrigin = "Nanoware/Terasology/develop"
+        } else if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/X")) { // Unusual module tests with separate build harness (and JteConfig branch - defined elsewhere)
+            buildHarnessOrigin = "Nanoware/Terasology/experimental"
+        }
+
+        echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
+        copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
+        copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
         def realProjectName = findRealProjectName()
         echo "Setting real project name to: $realProjectName"
@@ -26,7 +34,7 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Build') {
-        sh './gradlew clean htmlDependencyReport jar'
+        sh './gradlew --console=plain clean htmlDependencyReport jar'
         publishHTML([allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: 'build/reports/project/dependencies', reportFiles: 'index.html', reportName: 'Dependency Report', reportTitles: 'Dependency Report'])
         archiveArtifacts 'build/libs/*.jar'
     }
@@ -65,19 +73,22 @@ node ("ts-module && heavy && java8") {
             tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
     }
 
-    stage('Documentation') {
-        sh './gradlew --console=plain javadoc'
-        step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
-        recordIssues skipBlames: true, tool: javaDoc()
-    }
-
     stage('Integration Tests') {
         try {
             sh './gradlew --console=plain integrationTest'
         } catch (err) {
             currentBuild.result = 'UNSTABLE'
         } finally {
-            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true
+            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
+        }
+    }
+
+    stage('Documentation') {
+        sh './gradlew --console=plain javadoc'
+        // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
+        if (fileExists("build/docs/javadoc/index.html")) {
+            step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
+            recordIssues skipBlames: true, tool: javaDoc()
         }
     }
 }
