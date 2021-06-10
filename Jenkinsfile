@@ -31,6 +31,14 @@ node ("ts-module && heavy && java8") {
         archiveArtifacts 'build/libs/*.jar'
     }
 
+    stage('Unit Tests') {
+        try {
+            sh './gradlew --console=plain unitTest'
+        } finally {
+            junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
+        }
+    }
+
     stage('Publish') {
         if (env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")) {
             withCredentials([usernamePassword(credentialsId: 'artifactory-gooey', usernameVariable: 'artifactoryUser', passwordVariable: 'artifactoryPass')]) {
@@ -42,20 +50,35 @@ node ("ts-module && heavy && java8") {
     }
 
     stage('Analytics') {
-        sh './gradlew check spotbugsmain javadoc'
+        sh './gradlew --console=plain check -x test'
+        // the default resolution when omitting `defaultBranch` is to `master` - which is wrong in our case. 
+        discoverGitReferenceBuild(defaultBranch: 'develop') //TODO: does this also work for PRs with different base branch?
+
+        recordIssues skipBlames: true, qualityGates: [[threshold: 1, type: 'NEW', unstable: true]], 
+            tools: [
+                checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
+                spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true),
+                pmdParser(pattern: '**/build/reports/pmd/*.xml')
+            ] 
+
+        recordIssues skipBlames: true, 
+            tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
     }
 
-    stage('Record') {
-        // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
-        if (fileExists("build/docs/javadoc/index.html")) {
-            step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
-            recordIssues tool: javaDoc()
+    stage('Documentation') {
+        sh './gradlew --console=plain javadoc'
+        step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
+        recordIssues skipBlames: true, tool: javaDoc()
+    }
+
+    stage('Integration Tests') {
+        try {
+            sh './gradlew --console=plain integrationTest'
+        } catch (err) {
+            currentBuild.result = 'UNSTABLE'
+        } finally {
+            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true
         }
-        junit testResults: 'build/test-results/test/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
-        recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
-        recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true)
-        recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
-        recordIssues tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'ASAP')
     }
 }
 
