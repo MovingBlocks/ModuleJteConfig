@@ -59,7 +59,7 @@ node ("ts-module && heavy && java8") {
         try {
             sh './gradlew --console=plain unitTest'
         } finally {
-            junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
+            junit testResults: '**/build/reports/tests/unitTest/*.xml', allowEmptyResults: true
         }
     }
 
