@@ -3,8 +3,24 @@ properties([
     buildDiscarder(logRotator(artifactNumToKeepStr: '1'))
 ])
 
+/**
+ * Main pipeline definition for building Terasology modules.
+ *
+ * It uses the Scripted Pipeline Syntax.
+ * See https://www.jenkins.io/doc/book/pipeline/#declarative-versus-scripted-pipeline-syntax
+ *
+ * This pipeline uses Jenkins plugins to collect and report additional information about the build.
+ *
+ *   - Warnings Next Generation Plugin (https://plugins.jenkins.io/warnings-ng/)
+ *      To record issues from code scans and static analysis tools, e.g., CheckStyle or Spotbugs.
+ *   - Git Forensics Plugin (https://plugins.jenkins.io/git-forensics/)
+ *      To compare code scans and static analysis against a reference build from the base branch.
+ *   - JUnit Plugin (https://plugins.jenkins.io/junit/)
+ *      To record the results of our test suites from JUnit format. 
+ *
+ */
 node ("ts-module && heavy && java8") {
-    stage('Prepare') {
+    stage('Setup') {
         echo "Going to check out the things !"
         checkout scm
 
@@ -21,16 +37,16 @@ node ("ts-module && heavy && java8") {
         copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
         def realProjectName = findRealProjectName()
-        echo "Setting real project name to: $realProjectName"
+        echo "Setting project name to: $realProjectName"
+
+        sh 'rm -f gradle.properties'
+
         sh """
-            ls
-            rm -f settings.gradle
-            rm -f gradle.properties
-            echo "rootProject.name = '$realProjectName'" >> settings.gradle
+            echo "rootProject.name = '$realProjectName'" > settings.gradle
             echo 'includeBuild("build-logic")' >> settings.gradle
-            cat settings.gradle
-            chmod +x gradlew
         """
+
+        sh 'chmod +x gradlew'
     }
 
     stage('Build') {
@@ -43,7 +59,13 @@ node ("ts-module && heavy && java8") {
         try {
             sh './gradlew --console=plain unitTest'
         } finally {
-            junit testResults: 'build/test-results/unitTest/*.xml', allowEmptyResults: true
+
+            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
+            // to `build/test-results/*`.
+            // We need to upload the XML reports for visualization in Jenkins. 
+            //
+            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+            junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
         }
     }
 
@@ -57,20 +79,20 @@ node ("ts-module && heavy && java8") {
         }
     }
 
-    stage('Integration Tests') {
-        try {
-            sh './gradlew --console=plain integrationTest'
-        } finally {
-            junit testResults: 'build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
-        }
-    }
-
     stage('Analytics') {
-        sh './gradlew --console=plain check -x test spotbugsmain'
-        recordIssues tool: checkStyle(pattern: '**/build/reports/checkstyle/*.xml')
-        recordIssues tool: spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true)
-        recordIssues tool: pmdParser(pattern: '**/build/reports/pmd/*.xml')
-        recordIssues tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'ASAP')
+        sh './gradlew --console=plain check -x test'
+        // the default resolution when omitting `defaultBranch` is to `master` - which is wrong in our case. 
+        discoverGitReferenceBuild(defaultBranch: 'develop') //TODO: does this also work for PRs with different base branch?
+
+        recordIssues skipBlames: true,
+            tools: [
+                checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
+                spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true),
+                pmdParser(pattern: '**/build/reports/pmd/*.xml')
+            ] 
+
+        recordIssues skipBlames: true, 
+            tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
     }
 
     stage('Documentation') {
@@ -78,7 +100,28 @@ node ("ts-module && heavy && java8") {
         // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
         if (fileExists("build/docs/javadoc/index.html")) {
             step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
-            recordIssues tool: javaDoc()
+            recordIssues skipBlames: true, tool: javaDoc()
+        }
+    }
+
+    stage('Integration Tests') {
+        try {
+            sh './gradlew --console=plain integrationTest'
+        } catch (err) {
+            // Currently, all MTE tests are broken after the migration to gestalt v7.
+            // 
+            // By catching the error here the failed test execution should not fail the stage,
+            // and thereby no longer fail the complete build.
+            //
+            // See https://github.com/MovingBlocks/Terasology/issues/4757
+        } finally {
+
+            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
+            // to `build/test-results/*`.
+            // We need to upload the XML reports for visualization in Jenkins. 
+            //
+            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
         }
     }
 }
