@@ -59,7 +59,13 @@ node ("ts-module && heavy && java8") {
         try {
             sh './gradlew --console=plain unitTest'
         } finally {
-            junit testResults: '**/build/reports/tests/unitTest/*.xml', allowEmptyResults: true
+
+            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
+            // to `build/test-results/*`.
+            // We need to upload the XML reports for visualization in Jenkins. 
+            //
+            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+            junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
         }
     }
 
@@ -109,7 +115,13 @@ node ("ts-module && heavy && java8") {
             //
             // See https://github.com/MovingBlocks/Terasology/issues/4757
         } finally {
-            junit testResults: '**/build/reports/tests/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
+
+            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
+            // to `build/test-results/*`.
+            // We need to upload the XML reports for visualization in Jenkins. 
+            //
+            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
         }
     }
 }
