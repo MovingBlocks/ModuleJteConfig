@@ -156,14 +156,6 @@ pipeline {
                 sh './gradlew --console=plain integrationTest'
             }
             post {
-                failure {
-                    // Currently, all MTE tests are broken after the migration to gestalt v7.
-                    // 
-                    // By catching the error here the failed test execution should not fail the stage,
-                    // and thereby no longer fail the complete build.
-                    //
-                    // See https://github.com/MovingBlocks/Terasology/issues/4757
-                }
                 always {
                     // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*`
                     // and XML reports to `build/test-results/*`.
