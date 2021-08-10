@@ -2,7 +2,7 @@
 boolean specialBranch = env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")
 
 String[] jobNameParts = env.JOB_NAME.tokenize('/') as String[]
-String realPojrectName = jobNameParts.length < 2 ? env.JOB_NAME : jobNameParts[jobNameParts.length - 2]
+String realProjectName = jobNameParts.length < 2 ? env.JOB_NAME : jobNameParts[jobNameParts.length - 2]
 boolean originNanoware = jobNameParts[0].equals("Nanoware")
 boolean experimental = jobNameParts.length >= 2 && jobNameParts[2].startsWith("X")
 
