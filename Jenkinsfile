@@ -69,16 +69,20 @@ pipeline {
             steps {
                 // Jenkins sometimes doesn't run Gradle automatically in plain console mode, so make it explicit
                 sh './gradlew --console=plain clean htmlDependencyReport jar'
-                publishHTML([
-                    allowMissing: false, 
-                    alwaysLinkToLastBuild: true, 
-                    keepAll: true, 
-                    reportDir: 'build/reports/project/dependencies', 
-                    reportFiles: 'index.html', 
-                    reportName: 'Dependency Report', 
-                    reportTitles: 'Dependency Report'
-                ])
                 archiveArtifacts 'build/libs/*.jar'
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: false, 
+                        alwaysLinkToLastBuild: true, 
+                        keepAll: true, 
+                        reportDir: 'build/reports/project/dependencies', 
+                        reportFiles: 'index.html', 
+                        reportName: 'Dependency Report', 
+                        reportTitles: 'Dependency Report'
+                    ])
+                }
             }
         }
 
@@ -114,7 +118,7 @@ pipeline {
                         publish \\
                         -PmavenUser=${artifactoryUser} \\
                         -PmavenPass=${artifactoryPass}
-                    '''	
+                    '''
                 }
             }
         }
@@ -122,20 +126,24 @@ pipeline {
         stage('Analytics') {
             steps {
                 sh './gradlew --console=plain check -x test'
-                // the default resolution when omitting `defaultBranch` is to `master`
-                // this is wrong in our case, so explicitly set `develop` as default
-                // TODO: does this also work for PRs with different base branch?
-                discoverGitReferenceBuild(defaultBranch: 'develop')
-                recordIssues skipBlames: true,
+            }
+            post {
+                always {
+                    // the default resolution when omitting `defaultBranch` is to `master`
+                    // this is wrong in our case, so explicitly set `develop` as default
+                    // TODO: does this also work for PRs with different base branch?
+                    discoverGitReferenceBuild(defaultBranch: 'develop')
+                    recordIssues skipBlames: true,
                     tools: [
                         checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
                         spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true),
                         pmdParser(pattern: '**/build/reports/pmd/*.xml')
                     ]
 
-                recordIssues skipBlames: true,
-                    tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', \
+                    recordIssues skipBlames: true,
+                        tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', \
                                         lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
+                }
             }
         }
 
