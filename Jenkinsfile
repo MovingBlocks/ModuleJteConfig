@@ -1,3 +1,24 @@
+// Minor housekeeping logic
+boolean shouldPublish = env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")
+
+String[] jobNameParts = env.JOB_NAME.tokenize('/') as String[]
+String realProjectName = jobNameParts.length < 2 ? env.JOB_NAME : jobNameParts[jobNameParts.length - 2]
+boolean originNanoware = jobNameParts[0].equals("Nanoware")
+// referring to the experimental line of Nanoware module build jobs on jenkins (jenkins.terasology.io/teraorg/job/Nanoware/job/TerasologyModules/job/X)
+boolean experimental = jobNameParts.length >= 2 && jobNameParts[2].startsWith("X")
+
+// Vary where we copy the build harness from based on where the actively running job lives
+String buildHarnessOrigin = "Terasology/engine/develop"
+if (originNanoware) {
+    if (experimental) {
+        // Unusual module tests with separate build harness (and JteConfig branch - defined elsewhere)
+        buildHarnessOrigin = "Nanoware/Terasology/experimental"
+    } else {
+        // "Normal" module tests with the regular build harness in Nanoware land
+        buildHarnessOrigin = "Nanoware/Terasology/develop"
+    }
+}
+
 // Only keep a single build's worth of artifacts before truncating (module jars get published to Artifactory anyway)
 properties([
     buildDiscarder(logRotator(artifactNumToKeepStr: '1'))
@@ -6,8 +27,8 @@ properties([
 /**
  * Main pipeline definition for building Terasology modules.
  *
- * It uses the Scripted Pipeline Syntax.
- * See https://www.jenkins.io/doc/book/pipeline/#declarative-versus-scripted-pipeline-syntax
+ * It uses the Declarative Pipeline Syntax.
+ * See https://www.jenkins.io/doc/book/pipeline/syntax
  *
  * This pipeline uses Jenkins plugins to collect and report additional information about the build.
  *
@@ -19,115 +40,140 @@ properties([
  *      To record the results of our test suites from JUnit format. 
  *
  */
-node ("ts-module && heavy && java8") {
-    stage('Setup') {
-        echo "Going to check out the things !"
-        checkout scm
-
-        // Vary where we copy the build harness from based on where the actively running job lives
-        def buildHarnessOrigin = "Terasology/engine/develop"
-        if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/H")) { // "Normal" module tests with the regular build harness in Nanoware land
-            buildHarnessOrigin = "Nanoware/Terasology/develop"
-        } else if (env.JOB_NAME.startsWith("Nanoware/TerasologyModules/X")) { // Unusual module tests with separate build harness (and JteConfig branch - defined elsewhere)
-            buildHarnessOrigin = "Nanoware/Terasology/experimental"
-        }
-
-        echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
-        copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
-        copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
-
-        def realProjectName = findRealProjectName()
-        echo "Setting project name to: $realProjectName"
-
-        sh 'rm -f gradle.properties'
-
-        sh """
-            echo "rootProject.name = '$realProjectName'" > settings.gradle
-            echo 'includeBuild("build-logic")' >> settings.gradle
-        """
-
-        sh 'chmod +x gradlew'
+pipeline {
+    agent {
+        label 'ts-module && heavy && java8'
     }
+    stages {
+         // declarative pipeline does `checkout scm` automatically when hitting first stage
+        stage('Setup') {
+            steps {
+                echo 'Automatically checked out the things!'
 
-    stage('Build') {
-        sh './gradlew --console=plain clean htmlDependencyReport jar'
-        publishHTML([allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: 'build/reports/project/dependencies', reportFiles: 'index.html', reportName: 'Dependency Report', reportTitles: 'Dependency Report'])
-        archiveArtifacts 'build/libs/*.jar'
-    }
+                echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
+                copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
+                copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
-    stage('Unit Tests') {
-        try {
-            sh './gradlew --console=plain unitTest'
-        } finally {
+                echo "Setting project name to: $realProjectName"
 
-            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
-            // to `build/test-results/*`.
-            // We need to upload the XML reports for visualization in Jenkins. 
-            //
-            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
-            junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
-        }
-    }
+                sh 'rm -f gradle.properties'
 
-    stage('Publish') {
-        if (env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")) {
-            withCredentials([usernamePassword(credentialsId: 'artifactory-gooey', usernameVariable: 'artifactoryUser', passwordVariable: 'artifactoryPass')]) {
-                sh './gradlew --console=plain -Dorg.gradle.internal.publish.checksums.insecure=true publish -PmavenUser=${artifactoryUser} -PmavenPass=${artifactoryPass}'
+                sh """
+                    echo "rootProject.name = '$realProjectName'" > settings.gradle
+                    echo 'includeBuild("build-logic")' >> settings.gradle
+                """
+                sh 'chmod +x gradlew'
             }
-        } else {
-            println "Running on a branch other than 'master' or 'develop' bypassing publishing"
+        }
+
+        stage('Build') {
+            steps {
+                // Jenkins sometimes doesn't run Gradle automatically in plain console mode, so make it explicit
+                sh './gradlew --console=plain clean htmlDependencyReport jar'
+                archiveArtifacts 'build/libs/*.jar'
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: false, 
+                        alwaysLinkToLastBuild: true, 
+                        keepAll: true, 
+                        reportDir: 'build/reports/project/dependencies', 
+                        reportFiles: 'index.html', 
+                        reportName: 'Dependency Report', 
+                        reportTitles: 'Dependency Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh './gradlew --console=plain unitTest'
+            }
+            post {
+                always {
+                    // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*`
+                    // and XML reports to `build/test-results/*`.
+                    // We need to upload the XML reports for visualization in Jenkins.
+                    //
+                    // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+                    junit testResults: '**/build/test-results/unitTest/*.xml', allowEmptyResults: true
+                }
+            }
+        }
+
+        stage('Publish') {
+            when {
+                expression {
+                    shouldPublish
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'artifactory-gooey', \
+                                                    usernameVariable: 'artifactoryUser', \
+                                                    passwordVariable: 'artifactoryPass')]) {
+                    sh '''./gradlew \\
+                        --console=plain \\
+                        -Dorg.gradle.internal.publish.checksums.insecure=true \\
+                        publish \\
+                        -PmavenUser=${artifactoryUser} \\
+                        -PmavenPass=${artifactoryPass}
+                    '''
+                }
+            }
+        }
+
+        stage('Analytics') {
+            steps {
+                sh './gradlew --console=plain check -x test'
+            }
+            post {
+                always {
+                    // the default resolution when omitting `defaultBranch` is to `master`
+                    // this is wrong in our case, so explicitly set `develop` as default
+                    // TODO: does this also work for PRs with different base branch?
+                    discoverGitReferenceBuild(defaultBranch: 'develop')
+                    recordIssues skipBlames: true,
+                    tools: [
+                        checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
+                        spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true),
+                        pmdParser(pattern: '**/build/reports/pmd/*.xml')
+                    ]
+
+                    recordIssues skipBlames: true,
+                        tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', \
+                                        lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
+                }
+            }
+        }
+
+        stage('Documentation') {
+            steps {
+                sh './gradlew --console=plain javadoc'
+                script {
+                    if (fileExists("build/docs/javadoc/index.html")) {
+                        step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
+                        recordIssues skipBlames: true, tool: javaDoc()
+                    }
+                }
+            }
+        }
+
+        stage('Integration Tests') {
+            steps {
+                sh './gradlew --console=plain integrationTest'
+            }
+            post {
+                always {
+                    // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*`
+                    // and XML reports to `build/test-results/*`.
+                    // We need to upload the XML reports for visualization in Jenkins.
+                    //
+                    // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
+                    junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
+                }
+            }
         }
     }
-
-    stage('Analytics') {
-        sh './gradlew --console=plain check -x test'
-        // the default resolution when omitting `defaultBranch` is to `master` - which is wrong in our case. 
-        discoverGitReferenceBuild(defaultBranch: 'develop') //TODO: does this also work for PRs with different base branch?
-
-        recordIssues skipBlames: true,
-            tools: [
-                checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
-                spotBugs(pattern: '**/build/reports/spotbugs/main/*.xml', useRankAsPriority: true),
-                pmdParser(pattern: '**/build/reports/pmd/*.xml')
-            ] 
-
-        recordIssues skipBlames: true, 
-            tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
-    }
-
-    stage('Documentation') {
-        sh './gradlew --console=plain javadoc'
-        // Test for the presence of Javadoc so we can skip it if there is none (otherwise would fail the build)
-        if (fileExists("build/docs/javadoc/index.html")) {
-            step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
-            recordIssues skipBlames: true, tool: javaDoc()
-        }
-    }
-
-    stage('Integration Tests') {
-        try {
-            sh './gradlew --console=plain integrationTest'
-        } catch (err) {
-            // Currently, all MTE tests are broken after the migration to gestalt v7.
-            // 
-            // By catching the error here the failed test execution should not fail the stage,
-            // and thereby no longer fail the complete build.
-            //
-            // See https://github.com/MovingBlocks/Terasology/issues/4757
-        } finally {
-
-            // Gradle generates both a HTML report of the unit tests to `build/reports/tests/*` and XML reports
-            // to `build/test-results/*`.
-            // We need to upload the XML reports for visualization in Jenkins. 
-            //
-            // See https://docs.gradle.org/current/userguide/java_testing.html#test_reporting
-            junit testResults: '**/build/test-results/integrationTest/*.xml', allowEmptyResults: true, healthScaleFactor: 0.0
-        }
-    }
-}
-
-String findRealProjectName() {
-    def jobNameParts = env.JOB_NAME.tokenize('/') as String[]
-    println "Job name parts: $jobNameParts"
-    return jobNameParts.length < 2 ? env.JOB_NAME : jobNameParts[jobNameParts.length - 2]
 }
