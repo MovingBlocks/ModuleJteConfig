@@ -1,9 +1,10 @@
 // Minor housekeeping logic
-boolean specialBranch = env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")
+boolean shouldPublish = env.BRANCH_NAME.equals("master") || env.BRANCH_NAME.equals("develop")
 
 String[] jobNameParts = env.JOB_NAME.tokenize('/') as String[]
 String realProjectName = jobNameParts.length < 2 ? env.JOB_NAME : jobNameParts[jobNameParts.length - 2]
 boolean originNanoware = jobNameParts[0].equals("Nanoware")
+// referring to the experimental line of Nanoware module build jobs on jenkins (jenkins.terasology.io/teraorg/job/Nanoware/job/TerasologyModules/job/X)
 boolean experimental = jobNameParts.length >= 2 && jobNameParts[2].startsWith("X")
 
 // Vary where we copy the build harness from based on where the actively running job lives
@@ -105,7 +106,7 @@ pipeline {
         stage('Publish') {
             when {
                 expression {
-                    specialBranch
+                    shouldPublish
                 }
             }
             steps {
