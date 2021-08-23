@@ -158,6 +158,19 @@ pipeline {
                     }
                 }
             }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: true,
+                        keepAll: false,
+                        alwaysLinkToLastBuild: true,
+                        reportDir: 'docs',
+                        reportFiles: 'index.html',
+                        reportName: 'Docs',
+                        reportTitles: 'Docs'
+                    ])
+                }
+            }
         }
 
         stage('Integration Tests') {
