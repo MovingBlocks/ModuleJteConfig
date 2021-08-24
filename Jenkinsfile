@@ -37,7 +37,7 @@ properties([
  *   - Git Forensics Plugin (https://plugins.jenkins.io/git-forensics/)
  *      To compare code scans and static analysis against a reference build from the base branch.
  *   - JUnit Plugin (https://plugins.jenkins.io/junit/)
- *      To record the results of our test suites from JUnit format. 
+ *      To record the results of our test suites from JUnit format.
  *
  */
 pipeline {
@@ -75,12 +75,12 @@ pipeline {
             post {
                 always {
                     publishHTML([
-                        allowMissing: false, 
-                        alwaysLinkToLastBuild: true, 
-                        keepAll: true, 
-                        reportDir: 'build/reports/project/dependencies', 
-                        reportFiles: 'index.html', 
-                        reportName: 'Dependency Report', 
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'build/reports/project/dependencies',
+                        reportFiles: 'index.html',
+                        reportName: 'Dependency Report',
                         reportTitles: 'Dependency Report'
                     ])
                 }
@@ -153,9 +153,22 @@ pipeline {
                 sh './gradlew --console=plain javadoc'
                 script {
                     if (fileExists("build/docs/javadoc/index.html")) {
-                        step([$class: 'JavadocArchiver', javadocDir: 'build/docs/javadoc', keepAll: false])
+                        javaDoc javadocDir: 'build/docs/javadoc', keepAll: false
                         recordIssues skipBlames: true, tool: javaDoc()
                     }
+                }
+            }
+            post {
+                always {
+                    publishHTML([
+                        allowMissing: true,
+                        keepAll: false,
+                        alwaysLinkToLastBuild: true,
+                        reportDir: 'docs',
+                        reportFiles: 'index.html',
+                        reportName: 'Docs',
+                        reportTitles: 'Docs'
+                    ])
                 }
             }
         }
