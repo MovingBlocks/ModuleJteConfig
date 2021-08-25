@@ -73,7 +73,7 @@ pipeline {
         stage('Build') {
             steps {
                 // Jenkins sometimes doesn't run Gradle automatically in plain console mode, so make it explicit
-                sh './gradlew --console=plain clean htmlDependencyReport'
+                sh label: 'determining dependencies', script: './gradlew --console=plain clean htmlDependencyReport'
 
                 // Reporting this compile task as `stage/Build` for backwards compatibility with things configured
                 // to watch for CloudBees SCM Reporting stage status.
