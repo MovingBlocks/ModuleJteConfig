@@ -73,11 +73,20 @@ pipeline {
         stage('Build') {
             steps {
                 // Jenkins sometimes doesn't run Gradle automatically in plain console mode, so make it explicit
-                sh './gradlew --console=plain clean htmlDependencyReport jar'
+                sh './gradlew --console=plain clean htmlDependencyReport'
+
+                // Reporting this compile task as `stage/Build` for backwards compatibility with things configured
+                // to watch for CloudBees SCM Reporting stage status.
+                gitStatusWrapper(gitHubContext: 'stage/Build', description: 'Compiling Java') {
+                    sh './gradlew --console=plain jar'
+                }
                 archiveArtifacts 'build/libs/*.jar'
             }
             post {
                 always {
+                    recordIssues enabledForFailure: true, failOnError: true, publishAllIssues: true, skipBlames: true,
+                        qualityGates: [[threshold: 1, type: 'TOTAL_ERROR', unstable: false]],
+                        tools: [java()]
                     publishHTML([
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
