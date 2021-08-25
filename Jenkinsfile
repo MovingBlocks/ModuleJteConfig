@@ -49,6 +49,10 @@ pipeline {
         stage('Setup') {
             steps {
                 echo 'Automatically checked out the things!'
+                // the default resolution when omitting `defaultBranch` is to `master`
+                // this is wrong in our case, so explicitly set `develop` as default
+                // TODO: does this also work for PRs with different base branch?
+                discoverGitReferenceBuild(defaultBranch: 'develop')
 
                 echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
                 copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
@@ -130,10 +134,6 @@ pipeline {
             }
             post {
                 always {
-                    // the default resolution when omitting `defaultBranch` is to `master`
-                    // this is wrong in our case, so explicitly set `develop` as default
-                    // TODO: does this also work for PRs with different base branch?
-                    discoverGitReferenceBuild(defaultBranch: 'develop')
                     recordIssues skipBlames: true,
                     tools: [
                         checkStyle(pattern: '**/build/reports/checkstyle/*.xml'),
