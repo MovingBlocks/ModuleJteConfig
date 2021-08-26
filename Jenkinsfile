@@ -40,7 +40,7 @@ properties([
  *      To record the results of our test suites from JUnit format.
  *
  */
-pipeline {
+ipeline {
     agent {
         label 'ts-module && heavy && java8'
     }
