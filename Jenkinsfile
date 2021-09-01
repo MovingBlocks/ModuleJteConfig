@@ -184,7 +184,9 @@ pipeline {
 
         stage('Integration Tests') {
             steps {
-                sh './gradlew --console=plain integrationTest'
+                warnError("Integration Tests Failed") {  // if this errs, mark the build unstable, not failed.
+                    sh './gradlew --console=plain integrationTest'
+                }
             }
             post {
                 always {
