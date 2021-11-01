@@ -67,6 +67,7 @@ pipeline {
                     echo 'includeBuild("build-logic")' >> settings.gradle
                 """
                 sh 'chmod +x gradlew'
+                sh './gradlew --version'
             }
         }
 
