@@ -162,7 +162,7 @@ pipeline {
                 sh './gradlew --console=plain javadoc'
                 script {
                     if (fileExists("build/docs/javadoc/index.html")) {
-                        javaDoc javadocDir: 'build/docs/javadoc', keepAll: false
+                        javadoc javadocDir: 'build/docs/javadoc', keepAll: false
                         recordIssues skipBlames: true, tool: javaDoc()
                     }
                 }
