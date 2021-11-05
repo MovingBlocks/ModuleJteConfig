@@ -42,7 +42,7 @@ properties([
  */
 pipeline {
     agent {
-        label 'ts-module && heavy && java8'
+        label 'ts-module && heavy && java11'
     }
     stages {
          // declarative pipeline does `checkout scm` automatically when hitting first stage
@@ -67,6 +67,7 @@ pipeline {
                     echo 'includeBuild("build-logic")' >> settings.gradle
                 """
                 sh 'chmod +x gradlew'
+                sh './gradlew --version'
             }
         }
 
