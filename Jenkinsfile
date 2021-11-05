@@ -139,7 +139,7 @@ pipeline {
 
         stage('Analytics') {
             steps {
-                sh './gradlew --console=plain check -x test'
+                sh './gradlew --console=plain check -x test --continue'
             }
             post {
                 always {
