@@ -55,18 +55,20 @@ pipeline {
                 discoverGitReferenceBuild(defaultBranch: 'develop')
 
                 echo "Copying in the build harness from an engine job: $buildHarnessOrigin"
-                copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle", flatten: true, selector: lastSuccessful())
+                copyArtifacts(projectName: buildHarnessOrigin, filter: "templates/build.gradle, templates/module.logback-test.xml", flatten: true, selector: lastSuccessful())
                 copyArtifacts(projectName: buildHarnessOrigin, filter: "*, gradle/wrapper/**, config/**, natives/**, build-logic/**", selector: lastSuccessful())
 
                 echo "Setting project name to: $realProjectName"
+                writeFile file: 'settings.gradle',
+                    text: """rootProject.name = '$realProjectName'; includeBuild('build-logic')"""
 
-                sh 'rm -f gradle.properties'
+                sh label: 'configure workspace', script: '''
+                    rm -f gradle.properties
+                    chmod a+x gradlew
+                    mkdir -p src/test/resources
+                    mv --verbose --no-clobber module.logback-test.xml src/test/resources/logback-test.xml
+                '''
 
-                sh """
-                    echo "rootProject.name = '$realProjectName'" > settings.gradle
-                    echo 'includeBuild("build-logic")' >> settings.gradle
-                """
-                sh 'chmod +x gradlew'
                 sh './gradlew --version'
             }
         }
