@@ -159,6 +159,21 @@ pipeline {
                     recordIssues skipBlames: true,
                         tool: taskScanner(includePattern: '**/*.java,**/*.groovy,**/*.gradle', \
                                         lowTags: 'WIBNIF', normalTags: 'TODO', highTags: 'FIXME')
+
+                    // JSON asset validation, from the build harness's validateJsonAssets task.
+                    // Assets the engine genuinely cannot load already fail the Build stage, so
+                    // what lands here is the other half: files that load despite being defective,
+                    // such as a duplicate key whose earlier value is silently discarded.
+                    //
+                    // Recorded separately rather than joined to the tools list above, because
+                    // aggregating it with checkstyle/spotbugs/pmd would forfeit a gate of its own.
+                    // Gated on NEW only: several modules carry existing findings, and a gate on
+                    // TOTAL would mark them unstable forever, which just teaches people to ignore
+                    // the signal. New findings mark the stage unstable, never failed.
+                    recordIssues skipBlames: true, enabledForFailure: true,
+                        tool: checkStyle(id: 'json-assets', name: 'JSON Assets',
+                                         pattern: '**/build/reports/json-assets/*.xml'),
+                        qualityGates: [[threshold: 1, type: 'NEW_NORMAL', unstable: true]]
                 }
             }
         }
